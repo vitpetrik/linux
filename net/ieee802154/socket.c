@@ -674,6 +674,21 @@ static int dgram_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	cb->seclevel = ro->seclevel;
 	cb->seclevel_override = ro->seclevel_override;
 
+	struct cmsghdr *cmsg;
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+	for_each_cmsghdr(cmsg, msg) {
+		if (!CMSG_OK(msg, cmsg))
+			continue;
+		if (cmsg->cmsg_type == SCM_TXTIME) {	
+			skb->skb_mstamp_ns = *((u64 *)CMSG_DATA(cmsg));
+			shinfo->tx_flags |= SKBTX_SCHED_TSTAMP;
+		}
+		if (cmsg->cmsg_type == SO_TYPE) {	
+			cb->type = *((u8 *)CMSG_DATA(cmsg));
+		}
+	}
+
 	err = wpan_dev_hard_header(skb, dev, &dst_addr,
 				   ro->bound ? &ro->src_addr : NULL, size);
 	if (err < 0)
@@ -710,6 +725,12 @@ static int dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	struct sk_buff *skb;
 	struct dgram_sock *ro = dgram_sk(sk);
 	DECLARE_SOCKADDR(struct sockaddr_ieee802154 *, saddr, msg->msg_name);
+
+	sk->sk_tsflags |= SOF_TIMESTAMPING_RAW_HARDWARE;
+
+	if (flags & MSG_ERRQUEUE)
+		return sock_recv_errqueue(sk, msg, len,
+					  SOL_SOCKET, 1);
 
 	skb = skb_recv_datagram(sk, flags, &err);
 	if (!skb)
