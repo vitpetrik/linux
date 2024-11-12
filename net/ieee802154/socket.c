@@ -689,6 +689,8 @@ static int dgram_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 		}
 	}
 
+	shinfo->tx_flags |= SKBTX_HW_TSTAMP;
+
 	err = wpan_dev_hard_header(skb, dev, &dst_addr,
 				   ro->bound ? &ro->src_addr : NULL, size);
 	if (err < 0)
